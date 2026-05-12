@@ -1,0 +1,2242 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>ALModon Map Preview</title>
+  <link href="https://unpkg.com/maplibre-gl@5.23.0/dist/maplibre-gl.css" rel="stylesheet" />
+  <style>
+    :root {
+      --gold: #d8b400;
+      --navy: #082a67;
+    }
+
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background: #001f4d;
+      font-family: Arial, sans-serif;
+    }
+
+    .top-bar {
+      width: 100%;
+      height: 36px;
+      background: rgba(0, 31, 77, 0.95);
+      border-bottom: 1px solid rgba(216,180,0,0.65);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 12px;
+      color: white;
+      font-size: 12px;
+      font-weight: bold;
+      z-index: 5000;
+      position: relative;
+    }
+
+    .app {
+      position: relative;
+      width: 100vw;
+      height: calc(100vh - 36px);
+      overflow: hidden;
+      background: #001f4d;
+    }
+
+    #map {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+    }
+
+    .maplibregl-canvas-container.maplibregl-interactive,
+    .maplibregl-canvas {
+      cursor: crosshair;
+    }
+
+    .maplibregl-ctrl-top-left {
+      top: 56px;
+      left: 8px;
+    }
+
+    .maplibregl-ctrl-group {
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.18);
+      border: 1px solid rgba(216,180,0,0.6);
+    }
+
+    #image-overlay-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 132px;
+      pointer-events: none;
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding-right: 92px;
+      padding-left: 8px;
+      padding-bottom: 4px;
+      transition: bottom 0.25s ease, opacity 0.25s ease;
+    }
+
+    #overlay-img {
+      max-width: 100%;
+      max-height: 100%;
+      opacity: 0.5;
+      display: none;
+    }
+
+    .panel-toggle-master {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 5001;
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      border: 1px solid rgba(216,180,0,0.85);
+      background: rgba(0,31,77,0.85);
+      color: var(--gold);
+      font-size: 18px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(4px);
+      box-shadow: 0 4px 10px rgba(0,0,0,0.22);
+    }
+
+    .side-panel {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      bottom: 138px;
+      width: 72px;
+      z-index: 4000;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      scrollbar-width: thin;
+      transition: opacity 0.25s ease, transform 0.25s ease;
+    }
+
+    .bottom-panel {
+      position: absolute;
+      left: 10px;
+      right: 10px;
+      bottom: 18px;
+      min-height: 102px;
+      height: auto;
+      z-index: 4000;
+      padding: 0 0 12px 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      transition: opacity 0.25s ease, transform 0.25s ease;
+      scrollbar-width: thin;
+    }
+
+    .side-panel::-webkit-scrollbar,
+    .bottom-panel::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+
+    .side-panel::-webkit-scrollbar-thumb,
+    .bottom-panel::-webkit-scrollbar-thumb {
+      background: rgba(216,180,0,0.35);
+      border-radius: 10px;
+    }
+
+    .side-block, .dock-group {
+      background: transparent;
+      border: none;
+      box-shadow: none;
+      backdrop-filter: none;
+    }
+
+    .side-block {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 0;
+    }
+
+    .dock-group {
+      min-width: 130px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 0;
+      flex-shrink: 0;
+    }
+
+    .tool-label {
+      color: var(--gold);
+      font-size: 10px;
+      font-weight: bold;
+      text-align: center;
+      line-height: 1.1;
+      margin-bottom: 2px;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+    }
+
+    .tools-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      width: 100%;
+      align-items: stretch;
+    }
+
+    .icons-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .tool-btn, .dir-btn {
+      min-height: 34px;
+      width: 100%;
+      background: rgba(0, 31, 77, 0.55);
+      border: 1px solid rgba(216,180,0,0.82);
+      border-radius: 10px;
+      cursor: pointer;
+      color: white;
+      font-size: 10px;
+      padding: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      overflow: hidden;
+      line-height: 1.05;
+      backdrop-filter: blur(2px);
+    }
+
+    .side-panel .tool-btn {
+      min-height: 40px;
+      font-size: 9px;
+    }
+
+    .tool-btn.active {
+      background: rgba(216, 180, 0, 0.24);
+      border: 2px solid var(--gold);
+      box-shadow: 0 0 8px rgba(216,180,0,0.20);
+    }
+
+    .tool-btn img {
+      width: 100%;
+      max-width: 100%;
+      height: 26px;
+      object-fit: contain;
+      pointer-events: none;
+      display: block;
+    }
+
+    .slider-box {
+      padding: 5px 6px;
+      background: rgba(0,31,77,0.45);
+      border: 1px solid rgba(216,180,0,0.45);
+      border-radius: 10px;
+      backdrop-filter: blur(2px);
+    }
+
+    input[type=range] {
+      width: 100%;
+      cursor: pointer;
+      height: 16px;
+    }
+
+    .custom-marker {
+      pointer-events: auto;
+      user-select: none;
+    }
+
+    .custom-marker img {
+      display: block;
+      object-fit: contain;
+      filter: drop-shadow(0 0 5px rgba(0,0,0,0.55));
+      transform-origin: center center;
+    }
+
+    .village-label {
+      color: #082a67;
+      font-weight: 600;
+      line-height: 1;
+      white-space: nowrap;
+      text-shadow:
+        -1px -1px 0 #d8b400,
+         1px -1px 0 #d8b400,
+        -1px  1px 0 #d8b400,
+         1px  1px 0 #d8b400;
+      direction: rtl;
+      unicode-bidi: plaintext;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    .panels-hidden .side-panel,
+    .panels-hidden .bottom-panel {
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(10px);
+    }
+
+    .panels-hidden #image-overlay-container {
+      bottom: 6px;
+    }
+
+
+
+    /* ===== ALModon polished legend panel ===== */
+    .village-legend {
+      position: absolute;
+      top: 92px;
+      left: 18px;
+      width: 286px;
+      z-index: 3600;
+      background: linear-gradient(180deg, rgba(0,25,58,.94), rgba(0,13,31,.92));
+      border: 1px solid rgba(216,180,0,.92);
+      border-radius: 18px;
+      padding: 18px 18px 16px;
+      color: #fff;
+      direction: rtl;
+      backdrop-filter: blur(5px);
+      box-shadow: 0 10px 28px rgba(0,0,0,.45), inset 0 0 22px rgba(8,42,103,.35);
+    }
+    .village-legend-title {
+      color: #ffd24a;
+      font-size: 28px;
+      font-weight: 800;
+      margin-bottom: 18px;
+      text-align: center;
+      letter-spacing: -.5px;
+      text-shadow: 0 2px 4px rgba(0,0,0,.7);
+    }
+    .legend-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 12px 0;
+      font-size: 16px;
+      line-height: 1.45;
+      white-space: normal;
+    }
+    .legend-dot {
+      width: 30px;
+      height: 25px;
+      border-radius: 6px;
+      border: 1px solid rgba(255,255,255,.75);
+      display: inline-block;
+      flex-shrink: 0;
+      box-shadow: inset 0 0 10px rgba(255,255,255,.10), 0 2px 5px rgba(0,0,0,.25);
+    }
+    .legend-line {
+      width: 44px;
+      height: 8px;
+      border-radius: 999px;
+      background: #ffd400;
+      display: inline-block;
+      flex-shrink: 0;
+      box-shadow: 0 0 8px rgba(255,212,0,.9);
+    }
+    .legend-sep {
+      height: 1px;
+      background: rgba(216,180,0,.8);
+      margin: 16px 0 12px;
+    }
+    .legend-info {
+      font-size: 14px;
+      line-height: 1.75;
+      color: rgba(255,255,255,.92);
+      text-align: center;
+    }
+    .legend-actions {
+      margin-top: 16px;
+      display: flex;
+      gap: 8px;
+    }
+    #screenshotBtn {
+      width: 100%;
+      min-height: 46px;
+      border-radius: 12px;
+      border: 1px solid rgba(216,180,0,.85);
+      background: rgba(8,42,103,.86);
+      color: #fff;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 5px 12px rgba(0,0,0,.25);
+    }
+    #screenshotBtn:hover { background: rgba(12,60,122,.95); }
+    .viewer-mode .side-panel,
+    .viewer-mode .bottom-panel,
+    .viewer-mode .panel-toggle-master,
+    .viewer-mode #screenshotBtn,
+    .viewer-mode .legend-actions {
+      display: none !important;
+    }
+    .viewer-mode .village-legend { pointer-events: none; }
+
+    @media (max-width: 768px) {
+      #image-overlay-container {
+        padding-right: 82px;
+        bottom: 120px;
+      }
+
+      .side-panel {
+        width: 64px;
+        bottom: 126px;
+      }
+
+      .bottom-panel {
+        min-height: 96px;
+        left: 8px;
+        right: 8px;
+        bottom: 14px;
+        padding-bottom: 10px;
+      }
+
+      .dock-group {
+        min-width: 116px;
+      }
+
+      .tool-btn, .dir-btn {
+        min-height: 30px;
+        font-size: 8px;
+      }
+
+      .side-panel .tool-btn {
+        min-height: 36px;
+        font-size: 8px;
+      }
+
+      .tool-btn img {
+        height: 22px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="top-bar">
+    <div id="lb-time">00:00:00</div>
+    <div style="color:var(--gold)">ALModon Maps</div>
+    <div id="lb-date">01-04-2026</div>
+  </div>
+
+  <div class="app" id="appRoot">
+    <button class="panel-toggle-master" id="panelToggleMaster" onclick="togglePanels()" title="إظهار / إخفاء الأدوات">☰</button>
+
+    <div id="map"></div>
+
+    <div class="village-legend" id="villageLegend">
+      <div class="village-legend-title">دليل الخريطة</div>
+      <div class="legend-row"><span class="legend-dot" style="background:#d73027"></span><span>قرى مهددة</span></div>
+      <div class="legend-row"><span class="legend-dot" style="background:#0057c8"></span><span>قرى محتلة</span></div>
+      <div class="legend-row"><span class="legend-dot" style="background:#7b3fb2"></span><span>قرى غير محتلة / محاصرة<br><small>(خاضعة للخط الأصفر)</small></span></div>
+      <div class="legend-row"><span class="legend-dot" style="background:#159c9c"></span><span>قرى غير مهددة<br><small>(خارج الخط الأصفر)</small></span></div>
+      <div class="legend-row"><span class="legend-line"></span><span>قرى خاضعة للخط الأصفر</span></div>
+      <div class="legend-sep"></div>
+      <div class="legend-actions"><button id="screenshotBtn" onclick="takeMapScreenshot()">📸 لقطة شاشة</button></div>
+    </div>
+
+    <div id="image-overlay-container">
+      <img id="overlay-img" src="" alt="">
+    </div>
+
+    <div class="side-panel" id="sidePanel">
+      <div class="side-block">
+        <div class="tool-label">Sectors</div>
+        <button class="tool-btn" onclick="goSector('west')" title="Western">W</button>
+        <button class="tool-btn" onclick="goSector('central')" title="Central">C</button>
+        <button class="tool-btn" onclick="goSector('east')" title="Eastern">E</button>
+      </div>
+
+      <div class="side-block">
+        <div class="tool-label">Overlay</div>
+        <button class="tool-btn" onclick="document.getElementById('img-input').click()" title="صورة">📂</button>
+        <input type="file" id="img-input" hidden accept="image/*" onchange="loadOverlay(event)">
+        <div class="slider-box">
+          <input type="range" min="0" max="1" step="0.1" value="0.5" oninput="changeOpacity(this.value)">
+        </div>
+        <button class="tool-btn" onclick="clearOverlay()" style="background:#7a0000;" title="حذف">🗑️</button>
+      </div>
+
+      <div class="side-block">
+        <div class="tool-label">Data</div>
+        <button class="tool-btn" style="background:#1f8f3a;" onclick="exportData()" title="تصدير">💾</button>
+        <button class="tool-btn" style="background:#6f42c1;" onclick="document.getElementById('imp').click()" title="استيراد">📥</button>
+        <input type="file" id="imp" hidden onchange="importData(event)">
+        <button class="tool-btn" style="background:#c62828;" onclick="clearAllData()" title="مسح الكل">🧹</button>
+      </div>
+    </div>
+
+    <div class="bottom-panel" id="bottomPanel">
+      <div class="dock-group">
+        <div class="tool-label">Flip | Erase</div>
+        <div class="tools-grid">
+          <button class="dir-btn" onclick="flipActive(1)" title="يمين">➡️</button>
+          <button class="dir-btn" onclick="flipActive(-1)" title="يسار">⬅️</button>
+          <button class="tool-btn" onclick="toggleTool('erase_all', this)" style="grid-column: span 2; background:#9b0000;" title="محاية">🧹</button>
+        </div>
+      </div>
+
+      <div class="dock-group">
+        <div class="tool-label">الرموز</div>
+        <div class="tools-grid icons-grid">
+          <button class="tool-btn" onclick="toggleTool('place', this, {src:'ali 9.gif', w:90, h:90})" title="ali 9"><img src="ali 9.gif" alt=""></button>
+          <button class="tool-btn" onclick="toggleTool('place', this, {src:'at13_prev07-removebg-preview.png', w:90, h:64})" title="AT13"><img src="at13_prev07-removebg-preview.png" alt=""></button>
+          <button class="tool-btn" onclick="toggleTool('place', this, {src:'render2-removebg-preview.png', w:92, h:50})" title="Sea"><img src="render2-removebg-preview.png" alt=""></button>
+
+          <button class="tool-btn" onclick="toggleTool('place', this, {src:'allii2.gif', w:92, h:62})" title="Air"><img src="allii2.gif" alt=""></button>
+          <button class="tool-btn" onclick="toggleTool('place', this, {src:'shahed-136-.png', w:78, h:56})" title="Drone"><img src="shahed-136-.png" alt=""></button>
+          <button class="tool-btn" onclick="toggleTool('place', this, {src:'OIP-removebg-preview.png', w:82, h:82})" title="Rocket"><img src="OIP-removebg-preview.png" alt=""></button>
+
+          <button class="tool-btn" onclick="toggleTool('place', this, {src:'alii 3.gif', w:84, h:84})" title="alii 3"><img src="alii 3.gif" alt=""></button>
+          <button class="tool-btn" onclick="toggleTool('place', this, {src:'army_soldier.png', w:55, h:55})" title="Army"><img src="army_soldier.png" alt=""></button>
+          <button class="tool-btn" onclick="toggleTool('place', this, {src:'underground soldiers.png', w:60, h:60})" title="Underground"><img src="underground soldiers.png" alt=""></button>
+
+          <button class="tool-btn" onclick="toggleTool('place', this, {src:'pngwing.com (1).png', w:70, h:70, isBoom:true})" title="Boom 1"><img src="pngwing.com (1).png" alt=""></button>
+          <button class="tool-btn" onclick="toggleTool('place', this, {src:'pngwing.com.png', w:80, h:80, isBoom:true})" title="Boom 2"><img src="pngwing.com.png" alt=""></button>
+        </div>
+      </div>
+
+      <div class="dock-group">
+        <div class="tool-label">Arrows | Erase</div>
+        <div class="tools-grid">
+          <button class="tool-btn" onclick="toggleTool('arrow-red', this)" title="سهم أحمر">↗️</button>
+          <button class="tool-btn" onclick="toggleTool('arrow-blue', this)" title="سهم أزرق">↖️</button>
+          <button class="tool-btn" onclick="toggleTool('erase_all', this)" style="grid-column: span 2; background:#9b0000;" title="محاية القطع والأسهم">🧹</button>
+        </div>
+      </div>
+
+      <div class="dock-group">
+        <div class="tool-label">Yellow Line</div>
+        <div class="tools-grid">
+          <button class="tool-btn" onclick="startAutoPoly(this)" style="grid-column: span 2; background:#7b6500;" title="ابدأ رسم الخط الأصفر">🟡 خط</button>
+          <button class="tool-btn" onclick="finishAutoPoly()" title="تثبيت الخط">✅</button>
+          <button class="tool-btn" onclick="undoAutoPolyPoint()" title="تراجع نقطة">↩️</button>
+          <button class="tool-btn" onclick="toggleTool('erase_yellow', this)" style="background:#8a4b00;" title="محاية الخط الأصفر فقط">🟨🧹</button>
+          <button class="tool-btn" onclick="clearAutoPoly(true)" style="background:#700;" title="حذف مسودة الخط">🗑️</button>
+        </div>
+      </div>
+
+      <div class="dock-group">
+        <div class="tool-label">Villages</div>
+        <div class="tools-grid">
+          <button class="tool-btn active" id="vDangerBtn" onclick="selectVillageStatus('danger', this)" style="background:#b71c1c;" title="قرى مهددة">🔴</button>
+          <button class="tool-btn" id="vOccupiedBtn" onclick="selectVillageStatus('occupied', this)" style="background:#0d47a1;" title="قرى محتلة">🔵</button>
+          <button class="tool-btn" id="vBlockedBtn" onclick="selectVillageStatus('blocked', this)" style="background:#5e257f;" title="غير محتلة / محاصرة">🟣</button>
+          <button class="tool-btn" id="vSafeBtn" onclick="selectVillageStatus('safe_yellow', this)" style="background:#006b6b;" title="غير محتلة وغير محاصرة / خاضعة للخط الأصفر">🟢</button>
+          <button class="tool-btn" id="vClearBtn" onclick="selectVillageStatus('none', this)" style="background:#555;" title="إزالة اللون">⚪</button>
+          <button class="tool-btn" onclick="clearVillageStatuses()" style="background:#4b0082;" title="مسح ألوان القرى">🧽</button>
+        </div>
+      </div>
+
+      <div class="dock-group">
+        <div class="tool-label">Broadcast</div>
+        <div class="tools-grid">
+          <button class="tool-btn" onclick="toggleLayerVisibility('drawing', this)" data-layer-toggle="drawing" title="طبقة الرسم">🎨</button>
+          <button class="tool-btn" onclick="toggleLayerVisibility('tactical', this)" data-layer-toggle="tactical" title="القطع والتكتيك">🧩</button>
+          <button class="tool-btn" onclick="toggleLayerVisibility('labels', this)" data-layer-toggle="labels" title="الأسماء">🏷️</button>
+          <button class="tool-btn" onclick="toggleLayerVisibility('villages', this)" data-layer-toggle="villages" title="حدود القرى">🗺️</button>
+          <button class="tool-btn" onclick="toggleLayerVisibility('motion', this)" data-layer-toggle="motion" title="الموشن">🎞️</button>
+          <button class="tool-btn" onclick="saveScenePrompt()" title="حفظ مشهد">💾</button>
+          <button class="tool-btn" onclick="loadScenePrompt()" title="تحميل مشهد">📂</button>
+          <button class="tool-btn" onclick="replayLastMotion()" title="إعادة آخر موشن">⏪</button>
+          <button class="tool-btn" onclick="replayMotionTimeline()" title="إعادة الخط الزمني">▶️</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script src="https://unpkg.com/maplibre-gl@5.23.0/dist/maplibre-gl.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script>
+  maplibregl.setRTLTextPlugin(
+    'https://unpkg.com/@mapbox/mapbox-gl-rtl-text@0.3.0/dist/mapbox-gl-rtl-text.js',
+    true
+  );
+
+  function updateLBTime() {
+    const now = new Date();
+    const opt = {
+      timeZone: 'Asia/Beirut',
+      hour12: false,
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    };
+    document.getElementById('lb-time').innerText = now.toLocaleTimeString('en-GB', opt);
+    document.getElementById('lb-date').innerText = now.toLocaleDateString('en-GB').split('/').join('-');
+  }
+  setInterval(updateLBTime, 1000);
+  updateLBTime();
+
+  const VIEWER_MODE = true;
+  const appRoot = document.getElementById('appRoot');
+  let panelsVisible = true;
+  if (VIEWER_MODE) document.body.classList.add('viewer-mode');
+  function togglePanels(forceState = null) {
+    panelsVisible = forceState !== null ? forceState : !panelsVisible;
+    appRoot.classList.toggle('panels-hidden', !panelsVisible);
+  }
+
+  const selectedNames = [
+    'الخيام','الغجر','العديسة','الطيبة','مركبا','القنطرة','دير سريان','عدشيت القصير','ميس الجبل',
+    'عيترون','عيناتا','بنت جبيل','يارون','مارون الراس','عيتا الشعب','رميش','القوزح','القوزة','دبل',
+    'رامية','بيت ليف','يارين','الضهيرة','علما الشعب','اللبونة','شمع','الناقورة','البياضة'
+  ];
+
+
+
+  const VILLAGES_GEOJSON_URL = 'south_admin3.geojson';
+  let villagesGeoData = null;
+  let villagePaintMode = 'danger';
+  let villageClickHandledUntil = 0;
+  const villageStatuses = {};
+
+  const villageStatusMeta = {
+    danger: { label: 'قرى مهددة', color: '#d73027' },
+    occupied: { label: 'قرى محتلة', color: '#0057c8' },
+    blocked: { label: 'قرى غير محتلة / محاصرة', color: '#7b3fb2' },
+    safe_yellow: { label: 'قرى غير محتلة وغير محاصرة / خاضعة للخط الأصفر', color: '#159c9c' },
+    none: { label: 'بدون لون', color: 'rgba(0,0,0,0)' }
+  };
+
+  // القرى المهددة بعد وقف إطلاق النار - لائحة العمل الأساسية
+  const THREAT_VILLAGES = [
+  "كفرتبنيت",
+  "زوطر الشرقية",
+  "زوطر الغربية",
+  "أرنون",
+  "يحمر",
+  "شوكين",
+  "ميفدون",
+  "النبطية الفوقا",
+  "حبوش",
+  "ديرالزهراني",
+  "حومين الفوقا",
+  "عربصاليم",
+  "حاروف",
+  "عبا",
+  "جبشيت",
+  "عدشيت",
+  "قعقعية الجسر",
+  "بريقع",
+  "كفرصير",
+  "تول",
+  "كفرجوز",
+  "القصيبة",
+  "الدوير",
+  "الشرقية",
+  "النميرية",
+  "كفروة",
+  "كفر رمان",
+  "جرجوع",
+  "الغندورية",
+  "برج قلاويه",
+  "جميجمة",
+  "صفد",
+  "قلويه",
+  "برعشيت",
+  "شقرا",
+  "عيتا الجبل",
+  "تبنين",
+  "السلطانية",
+  "بير السلاسل",
+  "ديركيفا",
+  "خربة سلم",
+  "كفردونين",
+  "سلعا",
+  "صريفا",
+  "قلاويه",
+  "الصوانة",
+  "عين عرب",
+  "السماعية",
+  "الحنية",
+  "القليلة",
+  "وادي جيلو",
+  "الكنيسة",
+  "كفرا",
+  "مجدلزون",
+  "صديقين",
+  "المجادل",
+  "أرزون",
+  "الحميري",
+  "معروب",
+  "بدياس",
+  "البازورية",
+  "العباسية",
+  "طيردبا",
+  "معركة",
+  "برج رحال",
+  "عين بعال",
+  "باريش",
+  "جنّاتا",
+  "طيرفلسيه",
+  "الحلوسية",
+  "طورا",
+  "كوثرية السياد",
+  "الغسانية",
+  "مزرعة الداودية",
+  "انصارية",
+  "الزرارية",
+  "ريحان",
+  "زلاية",
+  "قلايا",
+  "مشغرة"
+];
+
+  // اختلافات كتابة الأسماء بين اللائحة وملف الحدود الرسمي
+  const THREAT_VILLAGE_ALIASES = {
+  "كفرتبنيت": [
+    "كفر تبنيت"
+  ],
+  "ديرالزهراني": [
+    "دير الزهراني"
+  ],
+  "عربصاليم": [
+    "عرب صاليم"
+  ],
+  "حاروف": [
+    "حروف"
+  ],
+  "كفرجوز": [
+    "مزرعة كفر جوز"
+  ],
+  "القصيبة": [
+    "قصيبة النبطية"
+  ],
+  "الغندورية": [
+    "غندورية بنت جبيل"
+  ],
+  "برج قلاويه": [
+    "برج قلاوية",
+    "برج قلويه"
+  ],
+  "قلاويه": [
+    "قلويه",
+    "قلاوية"
+  ],
+  "بير السلاسل": [
+    "بئر السلاسل"
+  ],
+  "ديركيفا": [
+    "دير كيفا"
+  ],
+  "كفردونين": [
+    "كفر دونين"
+  ],
+  "الصوانة": [
+    "صوانة مرجعيون"
+  ],
+  "السماعية": [
+    "سماعية صور",
+    "السماعية صور"
+  ],
+  "الكنيسة": [
+    "كنيسة صور"
+  ],
+  "مجدلزون": [
+    "مجدل زون"
+  ],
+  "طيردبا": [
+    "طير دبّه",
+    "طير دبة"
+  ],
+  "عين عرب": [
+    "عين عرب مرجعيون"
+  ],
+  "عين بعال": [
+    "عين بعل"
+  ],
+  "جنّاتا": [
+    "جناتا"
+  ],
+  "طيرفلسيه": [
+    "طير فلسيه"
+  ],
+  "زلاية": [
+    "زلايا"
+  ],
+  "انصارية": [
+    "أنصارية"
+  ],
+  "كفر رمان": [
+    "كفررمان"
+  ],
+  "كفروة": [
+    "كفروة أو بفروة"
+  ],
+  "الدوير": [
+    "الدوير النبطية"
+  ],
+  "العباسية": [
+    "عباسية",
+    "عباسية صور"
+  ],
+  "القليلة": [
+    "قليلة",
+    "قليلة صور"
+  ],
+  "تول": [
+    "تول النبطية"
+  ],
+  "صفد": [
+    "صفد البطيخ"
+  ],
+  "قلويه": [
+    "قلويه",
+    "قلاوية"
+  ],
+  "أرزون": [
+    "ارزون"
+  ]
+};
+
+  function buildThreatVillageLookup() {
+    const set = new Set();
+    THREAT_VILLAGES.forEach(name => {
+      set.add(normalizeVillageName(name));
+      (THREAT_VILLAGE_ALIASES[name] || []).forEach(alias => set.add(normalizeVillageName(alias)));
+    });
+    return set;
+  }
+
+  let threatVillageLookup = null;
+
+
+  function normalizeVillageName(name) {
+    return String(name || '')
+      .trim()
+      .replace(/[إأآا]/g, 'ا')
+      .replace(/ة/g, 'ه')
+      .replace(/ى/g, 'ي')
+      .replace(/\s+/g, ' ');
+  }
+
+  function getVillageName(props = {}) {
+    return props.almodon_name_ar || props.adm3_name1 || props.adm3_name || props.adm3_ref_name || 'قرية غير معروفة';
+  }
+
+  function isThreatVillage(props = {}) {
+    if (!threatVillageLookup) threatVillageLookup = buildThreatVillageLookup();
+    const candidates = [
+      props.almodon_name_ar,
+      props.adm3_name1,
+      props.adm3_name,
+      props.adm3_ref_name,
+      props.name
+    ].filter(Boolean).map(normalizeVillageName);
+    return candidates.some(name => threatVillageLookup.has(name));
+  }
+
+
+  function selectVillageStatus(status, btn) {
+    villagePaintMode = status;
+    document.querySelectorAll('#vDangerBtn,#vOccupiedBtn,#vBlockedBtn,#vSafeBtn,#vClearBtn').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    mode = 'view';
+    resetDraw();
+    stopMotionMode(true);
+  }
+
+  function applyVillageStatuses() {
+    if (!villagesGeoData || !map.getSource('villages')) return;
+    villagesGeoData.features.forEach((f, i) => {
+      const props = f.properties || {};
+      const key = props.almodon_key || normalizeVillageName(getVillageName(props)) || String(i);
+      props.almodon_key = key;
+      props.almodon_threat = isThreatVillage(props);
+      props.almodon_status = villageStatuses[key] || props.almodon_status || 'none';
+    });
+    map.getSource('villages').setData(villagesGeoData);
+  }
+
+  function clearVillageStatuses() {
+    if (!confirm('مسح كل ألوان القرى؟')) return;
+    Object.keys(villageStatuses).forEach(k => delete villageStatuses[k]);
+    if (villagesGeoData) {
+      villagesGeoData.features.forEach(f => { f.properties.almodon_status = 'none'; });
+    }
+    applyVillageStatuses();
+  }
+
+  function updateVillagesVisibility() {
+    const visible = layerState.villages ? 'visible' : 'none';
+    ['villages-fill','villages-line','villages-hover'].forEach(id => {
+      if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', visible);
+    });
+    if (map.getLayer('villages-label')) {
+      map.setLayoutProperty('villages-label', 'visibility', (layerState.villages && layerState.labels) ? 'visible' : 'none');
+    }
+    const legend = document.getElementById('villageLegend');
+    if (legend) legend.style.display = layerState.villages ? 'block' : 'none';
+  }
+
+  async function loadVillagesLayer() {
+    try {
+      const res = await fetch(VILLAGES_GEOJSON_URL);
+      if (!res.ok) throw new Error('Could not load ' + VILLAGES_GEOJSON_URL);
+      villagesGeoData = await res.json();
+      villagesGeoData.features = (villagesGeoData.features || []).filter(f => {
+        const t = f.geometry?.type;
+        return t === 'Polygon' || t === 'MultiPolygon';
+      }).map((f, i) => {
+        f.id = i;
+        f.properties = f.properties || {};
+        const key = normalizeVillageName(getVillageName(f.properties)) || String(i);
+        f.properties.almodon_key = key;
+        f.properties.almodon_threat = isThreatVillage(f.properties);
+        f.properties.almodon_status = villageStatuses[key] || 'none';
+        return f;
+      });
+
+      map.addSource('villages', { type: 'geojson', data: villagesGeoData, generateId: true });
+
+      map.addLayer({
+        id: 'villages-fill',
+        type: 'fill',
+        source: 'villages',
+        paint: {
+          'fill-color': [
+            'case',
+            ['==', ['get', 'almodon_status'], 'danger'], '#d73027',
+            ['==', ['get', 'almodon_status'], 'occupied'], '#0057c8',
+            ['==', ['get', 'almodon_status'], 'blocked'], '#7b3fb2',
+            ['==', ['get', 'almodon_status'], 'safe_yellow'], '#159c9c',
+            '#ffffff'
+          ],
+          'fill-opacity': [
+            'case',
+            ['!=', ['get', 'almodon_status'], 'none'], 0.62,
+            ['==', ['get', 'almodon_threat'], true], 0.04,
+            0.01
+          ]
+        }
+      }, 'poly-fill');
+
+      map.addLayer({
+        id: 'villages-line',
+        type: 'line',
+        source: 'villages',
+        paint: {
+          'line-color': [
+            'case',
+            ['==', ['get', 'almodon_threat'], true], '#ffffff',
+            'rgba(255,255,255,0.45)'
+          ],
+          'line-width': [
+            'case',
+            ['==', ['get', 'almodon_threat'], true], ['interpolate', ['linear'], ['zoom'], 8, 0.9, 10, 1.4, 12, 2.2],
+            ['interpolate', ['linear'], ['zoom'], 8, 0.25, 10, 0.55, 12, 0.9]
+          ],
+          'line-opacity': [
+            'case',
+            ['==', ['get', 'almodon_threat'], true], 0.85,
+            0.18
+          ]
+        }
+      }, 'poly-fill');
+
+      map.addLayer({
+        id: 'villages-hover',
+        type: 'line',
+        source: 'villages',
+        filter: ['==', ['get', 'almodon_key'], '___none___'],
+        paint: {
+          'line-color': '#ffffff',
+          'line-width': 4,
+          'line-opacity': 0.95
+        }
+      });
+
+      map.addLayer({
+        id: 'villages-label',
+        type: 'symbol',
+        source: 'villages',
+        filter: ['==', ['get', 'almodon_threat'], true],
+        minzoom: 9.5,
+        layout: {
+          'text-field': ['coalesce', ['get', 'adm3_name1'], ['get', 'adm3_name']],
+          'text-size': ['interpolate', ['linear'], ['zoom'], 10, 10, 12, 13, 14, 16],
+          'text-font': ['Open Sans Semibold'],
+          'text-allow-overlap': false,
+          'text-ignore-placement': false
+        },
+        paint: {
+          'text-color': '#082a67',
+          'text-halo-color': '#f2d457',
+          'text-halo-width': 1.3
+        }
+      });
+
+      const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false });
+
+      map.on('mousemove', 'villages-fill', (e) => {
+        map.getCanvas().style.cursor = 'pointer';
+        const f = e.features && e.features[0];
+        if (!f) return;
+        const name = getVillageName(f.properties);
+        const status = f.properties.almodon_status || 'none';
+        map.setFilter('villages-hover', ['==', ['get', 'almodon_key'], f.properties.almodon_key]);
+        const threatNote = f.properties.almodon_threat ? '<br><span style="color:#b8860b">ضمن لائحة القرى المهددة</span>' : '<br><span style="color:#777">حدود مرجعية</span>';
+        popup.setLngLat(e.lngLat).setHTML(`<div dir="rtl" style="font-family:Arial;font-size:12px"><b>${name}</b><br>${villageStatusMeta[status]?.label || 'بدون لون'}${threatNote}</div>`).addTo(map);
+      });
+
+      map.on('mouseleave', 'villages-fill', () => {
+        map.getCanvas().style.cursor = 'crosshair';
+        map.setFilter('villages-hover', ['==', ['get', 'almodon_key'], '___none___']);
+        popup.remove();
+      });
+
+      map.on('click', 'villages-fill', (e) => {
+        if (VIEWER_MODE) return;
+        // Do not color villages while drawing yellow line, placing icons, erasing, arrows, or motion.
+        if (mode !== 'view' || autoPolyMode || motionMode || unitToPlace) return;
+        if (!e.features || !e.features.length) return;
+        villageClickHandledUntil = Date.now() + 250;
+        const f = e.features[0];
+        const key = f.properties.almodon_key;
+        villageStatuses[key] = villagePaintMode;
+        f.properties.almodon_status = villagePaintMode;
+        applyVillageStatuses();
+      });
+
+      applyVillageStatuses();
+      updateVillagesVisibility();
+    } catch (err) {
+      console.error(err);
+      alert('لم يتم تحميل ملف حدود القرى. تأكد أن south_admin3.geojson موجود بنفس فولدر ملف الخريطة.');
+    }
+  }
+
+  const map = new maplibregl.Map({
+    container: 'map',
+    style: 'https://tiles.openfreemap.org/styles/liberty',
+    center: [35.39, 33.16],
+    zoom: 9.35,
+    minZoom: 8.6,
+    maxZoom: 15,
+    hash: false,
+    attributionControl: false,
+    doubleClickZoom: false,
+    preserveDrawingBuffer: true
+  });
+  map.addControl(new maplibregl.NavigationControl(), 'top-left');
+
+  function arabicField() {
+    return ['coalesce', ['get', 'name:ar'], ['get', 'name_ar'], ['get', 'name']];
+  }
+  function selectedFilter() {
+    return ['match', arabicField(), selectedNames, true, false];
+  }
+  function likelyPlaceLayer(layer) {
+    if (!layer || layer.type !== 'symbol') return false;
+    if (!layer.layout || layer.layout['text-field'] === undefined) return false;
+    const s = `${layer.id || ''} ${layer['source-layer'] || ''}`.toLowerCase();
+    return s.includes('place') || s.includes('settlement') || s.includes('village') || s.includes('city') || s.includes('town');
+  }
+  function collectTargets(style) {
+    const out = [];
+    const seen = new Set();
+    for (const layer of style.layers || []) {
+      if (!likelyPlaceLayer(layer)) continue;
+      if (!layer.source || !layer['source-layer']) continue;
+      const key = `${layer.source}|${layer['source-layer']}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        out.push({ source: layer.source, sourceLayer: layer['source-layer'] });
+      }
+    }
+    return out;
+  }
+  function softenBaseArabicLabels() {
+    const style = map.getStyle();
+    if (!style || !style.layers) return;
+    for (const layer of style.layers) {
+      if (!likelyPlaceLayer(layer)) continue;
+      try { map.setLayoutProperty(layer.id, 'text-field', arabicField()); } catch (e) {}
+      try { map.setPaintProperty(layer.id, 'text-color', '#1b2c4a'); } catch (e) {}
+      try { map.setPaintProperty(layer.id, 'text-halo-color', '#f0d36a'); } catch (e) {}
+      try { map.setPaintProperty(layer.id, 'text-halo-width', 1.0); } catch (e) {}
+      try { map.setPaintProperty(layer.id, 'text-halo-blur', 0.2); } catch (e) {}
+    }
+  }
+  function addSelectedBoostLabels() {
+    const targets = collectTargets(map.getStyle());
+    targets.forEach((target, i) => {
+      const layerId = `selected-villages-boost-${i}`;
+      if (map.getLayer(layerId)) return;
+      try {
+        map.addLayer({
+          id: layerId,
+          type: 'symbol',
+          source: target.source,
+          'source-layer': target.sourceLayer,
+          filter: selectedFilter(),
+          layout: {
+            'text-field': arabicField(),
+            'text-font': ['Open Sans Semibold'],
+            'text-size': ['interpolate', ['linear'], ['zoom'], 8.5, 12, 9.0, 14, 9.5, 16, 10.0, 18, 11.0, 20, 12.0, 22],
+            'text-max-width': 8,
+            'text-letter-spacing': 0,
+            'text-anchor': 'center',
+            'text-offset': [0, 0],
+            'text-padding': 2,
+            'symbol-placement': 'point',
+            'text-allow-overlap': false,
+            'text-ignore-placement': false
+          },
+          paint: {
+            'text-color': '#082a67',
+            'text-halo-color': '#d8b400',
+            'text-halo-width': 1.6,
+            'text-halo-blur': 0.15
+          }
+        });
+      } catch (e) {}
+    });
+  }
+
+
+  function toggleLayerVisibility(key, btn) {
+    layerState[key] = !layerState[key];
+    refreshLayerVisibility();
+    if (btn) btn.classList.toggle('active', !!layerState[key]);
+  }
+
+  function buildSceneData() {
+    return {
+      mapView: { center: map.getCenter(), zoom: map.getZoom() },
+      layerState: { ...layerState },
+      markers: placedMarkers.map(m => ({
+        lngLat: m.marker.getLngLat(),
+        data: m.data,
+        rotation: m.rotation || 0
+      })),
+      features: JSON.parse(JSON.stringify(vectorFeatures)),
+      overlay: {
+        src: document.getElementById('overlay-img').src || '',
+        display: document.getElementById('overlay-img').style.display || 'none',
+        opacity: document.getElementById('overlay-img').style.opacity || '0.5'
+      },
+      motionHistory: JSON.parse(JSON.stringify(motionHistory)),
+      villageStatuses: JSON.parse(JSON.stringify(villageStatuses))
+    };
+  }
+
+  function applySceneData(data) {
+    if (!data) return;
+    placedMarkers.slice().forEach(removeMarkerObj);
+    vectorFeatures.length = 0;
+    motionHistory = Array.isArray(data.motionHistory) ? data.motionHistory : [];
+    clearMotionTrail();
+    clearAutoPoly(true);
+    resetDraw();
+
+    if (Array.isArray(data.features)) {
+      data.features.forEach(f => vectorFeatures.push(f));
+    }
+    if (Array.isArray(data.markers)) {
+      data.markers.forEach(m => {
+        const obj = createMarker(m.lngLat.lat, m.lngLat.lng, m.data, m.rotation || 0);
+        obj.rotation = m.rotation || 0;
+      });
+    }
+    if (data.layerState) {
+      Object.assign(layerState, data.layerState);
+    }
+    if (data.villageStatuses) {
+      Object.keys(villageStatuses).forEach(k => delete villageStatuses[k]);
+      Object.assign(villageStatuses, data.villageStatuses);
+      applyVillageStatuses();
+    }
+    const img = document.getElementById('overlay-img');
+    if (data.overlay?.src) {
+      img.src = data.overlay.src;
+      img.style.display = data.overlay.display || 'block';
+      img.style.opacity = data.overlay.opacity || '0.5';
+    } else {
+      img.src = '';
+      img.style.display = 'none';
+    }
+
+    refreshLayerVisibility();
+
+    if (data.mapView?.center) {
+      map.jumpTo({ center: data.mapView.center, zoom: data.mapView.zoom || map.getZoom() });
+    }
+  }
+
+  function saveScenePrompt() {
+    const slot = prompt('احفظ المشهد بأي اسم؟', 'scene-1');
+    if (!slot) return;
+    localStorage.setItem('almodon_scene_' + slot, JSON.stringify(buildSceneData()));
+    alert('تم حفظ المشهد: ' + slot);
+  }
+
+  function loadScenePrompt() {
+    const slot = prompt('حمّل أي مشهد؟', 'scene-1');
+    if (!slot) return;
+    const raw = localStorage.getItem('almodon_scene_' + slot);
+    if (!raw) return alert('ما لقيت مشهد بهالاسم');
+    try {
+      applySceneData(JSON.parse(raw));
+      alert('تم تحميل المشهد: ' + slot);
+    } catch (e) {
+      alert('فشل تحميل المشهد');
+    }
+  }
+
+  function replayLastMotion() {
+    if (!motionHistory.length) return alert('ما في Motion محفوظ بعد');
+    const item = motionHistory[motionHistory.length - 1];
+    clearMotionTrail();
+    setTimeout(() => {
+      motionType = item.type;
+      animateMotion({ lng: item.start.lng, lat: item.start.lat }, { lng: item.end.lng, lat: item.end.lat }, true);
+    }, 80);
+  }
+
+  function replayMotionTimeline() {
+    if (!motionHistory.length) return alert('ما في Motion محفوظ بعد');
+    clearMotionTrail();
+    isReplayingMotion = true;
+    let i = 0;
+    function next() {
+      if (i >= motionHistory.length) {
+        isReplayingMotion = false;
+        return;
+      }
+      const item = motionHistory[i++];
+      motionType = item.type;
+      animateMotion({ lng: item.start.lng, lat: item.start.lat }, { lng: item.end.lng, lat: item.end.lat }, true);
+      setTimeout(next, (item.duration || 2200) + 450);
+    }
+    next();
+  }
+
+  const sectors = {
+    west: { center: [35.14, 33.13], zoom: 11.2 },
+    central: { center: [35.39, 33.12], zoom: 11.0 },
+    east: { center: [35.57, 33.20], zoom: 11.0 }
+  };
+
+  function goSector(key) {
+    const s = sectors[key];
+    map.jumpTo({ center: s.center, zoom: s.zoom });
+  }
+
+  let mode = 'view';
+  let unitToPlace = null;
+  let activeMarker = null;
+  let arrowStart = null;
+  let polyPoints = [];
+  let autoPolyMode = false;
+  let autoPolyPoints = [];
+  let activeAutoPolyBtn = null;
+
+  let motionMode = false;
+  let motionType = null;
+  let motionStart = null;
+  let motionBtn = null;
+  let motionIntervals = [];
+  let motionTimeouts = [];
+  let motionHistory = [];
+  let isReplayingMotion = false;
+  const DRONE_ANGLE_OFFSET = 180;
+
+  const layerState = {
+    drawing: true,
+    tactical: true,
+    labels: true,
+    villages: true,
+    motion: true
+  };
+
+  const placedMarkers = [];
+  const vectorFeatures = [];
+  const motionMarkers = [];
+
+  const defaultGeo = { type: 'FeatureCollection', features: [] };
+  const draftGeo = { type: 'FeatureCollection', features: [] };
+
+  map.on('load', () => {
+    softenBaseArabicLabels();
+    addSelectedBoostLabels();
+
+    map.addSource('drawn', { type: 'geojson', data: defaultGeo });
+    map.addSource('draft', { type: 'geojson', data: draftGeo });
+
+    map.addLayer({
+      id: 'poly-fill',
+      type: 'fill',
+      source: 'drawn',
+      filter: ['==', ['geometry-type'], 'Polygon'],
+      paint: {
+        'fill-color': ['coalesce', ['get', 'fillColor'], '#4da3ff'],
+        'fill-opacity': ['coalesce', ['get', 'fillOpacity'], 0.45]
+      }
+    });
+
+    map.addLayer({
+      id: 'poly-stroke',
+      type: 'line',
+      source: 'drawn',
+      filter: ['==', ['geometry-type'], 'Polygon'],
+      paint: {
+        'line-color': ['coalesce', ['get', 'strokeColor'], '#ffffff'],
+        'line-width': ['coalesce', ['get', 'strokeWidth'], 0]
+      }
+    });
+
+    map.addLayer({
+      id: 'line-layer',
+      type: 'line',
+      source: 'drawn',
+      filter: ['all', ['==', ['geometry-type'], 'LineString'], ['!=', ['get', 'kind'], 'yellow_line']],
+      paint: {
+        'line-color': ['coalesce', ['get', 'color'], '#ffffff'],
+        'line-width': ['coalesce', ['get', 'weight'], 3],
+        'line-opacity': ['coalesce', ['get', 'opacity'], 1],
+        'line-dasharray': ['coalesce', ['get', 'dash'], ['literal', [1,0]]]
+      }
+    });
+
+    // ===== Yellow Line Final Style (thin, smooth, glowing) =====
+    map.addLayer({
+      id: 'yellow-line-glow',
+      type: 'line',
+      source: 'drawn',
+      filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'kind'], 'yellow_line']],
+      layout: {
+        'line-join': 'round',
+        'line-cap': 'round'
+      },
+      paint: {
+        'line-color': '#ffb300',
+        'line-width': ['interpolate', ['linear'], ['zoom'], 8, 4, 11, 7, 14, 10],
+        'line-blur': 4,
+        'line-opacity': 0.55
+      }
+    });
+
+    map.addLayer({
+      id: 'yellow-line-main',
+      type: 'line',
+      source: 'drawn',
+      filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'kind'], 'yellow_line']],
+      layout: {
+        'line-join': 'round',
+        'line-cap': 'round'
+      },
+      paint: {
+        'line-color': '#ffd400',
+        'line-width': ['interpolate', ['linear'], ['zoom'], 8, 2, 11, 3.5, 14, 5],
+        'line-blur': 0.2,
+        'line-opacity': 1
+      }
+    });
+
+    map.addLayer({
+      id: 'yellow-line-core',
+      type: 'line',
+      source: 'drawn',
+      filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'kind'], 'yellow_line']],
+      layout: {
+        'line-join': 'round',
+        'line-cap': 'round'
+      },
+      paint: {
+        'line-color': '#fff7b0',
+        'line-width': ['interpolate', ['linear'], ['zoom'], 8, 0.6, 11, 1, 14, 1.6],
+        'line-opacity': 0.9
+      }
+    });
+
+    map.addLayer({
+      id: 'draft-line',
+      type: 'line',
+      source: 'draft',
+      filter: ['==', ['geometry-type'], 'LineString'],
+      layout: {
+        'line-join': 'round',
+        'line-cap': 'round'
+      },
+      paint: {
+        'line-color': ['coalesce', ['get', 'color'], '#FFD400'],
+        'line-width': ['coalesce', ['get', 'weight'], 3.5],
+        'line-blur': 0.2,
+        'line-opacity': 0.95
+      }
+    });
+
+    map.addLayer({
+      id: 'draft-point',
+      type: 'circle',
+      source: 'draft',
+      filter: ['==', ['geometry-type'], 'Point'],
+      paint: {
+        'circle-radius': 4,
+        'circle-color': ['coalesce', ['get', 'fillColor'], '#FFD900'],
+        'circle-stroke-color': '#ffffff',
+        'circle-stroke-width': 1
+      }
+    });
+
+    loadVillagesLayer();
+
+    map.on('click', onMapClick);
+    map.on('dblclick', onMapDoubleClick);
+    map.on('zoom', updateMarkerSizes);
+
+    setTimeout(refreshLayerVisibility, 300);
+  });
+
+  function loadOverlay(ev) {
+    const file = ev.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = document.getElementById('overlay-img');
+      img.src = e.target.result;
+      img.style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+  }
+  function changeOpacity(val) {
+    document.getElementById('overlay-img').style.opacity = val;
+  }
+  function clearOverlay() {
+    const img = document.getElementById('overlay-img');
+    img.src = '';
+    img.style.display = 'none';
+  }
+
+  function setPanelButtonsInactive() {
+    document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+    if (activeAutoPolyBtn) activeAutoPolyBtn.classList.remove('active');
+    if (motionBtn) motionBtn.classList.remove('active');
+  }
+
+  function toggleTool(newMode, btn, unitData = null) {
+    setPanelButtonsInactive();
+    clearAutoPoly(false);
+    stopMotionMode(false);
+    resetDraw();
+
+    if (mode === newMode && !unitData) {
+      mode = 'view';
+    } else {
+      mode = newMode;
+      unitToPlace = unitData;
+      if (btn) btn.classList.add('active');
+    }
+  }
+
+  function circleMode(c, btn) {
+    toggleTool('circle-' + c, btn);
+  }
+
+  function resetDraw() {
+    arrowStart = null;
+    polyPoints = [];
+    setDraft([], []);
+  }
+
+  function stopMotionMode(resetButton = true) {
+    motionMode = false;
+    motionType = null;
+    motionStart = null;
+    if (resetButton && motionBtn) {
+      motionBtn.classList.remove('active');
+      motionBtn = null;
+    }
+  }
+
+  function toggleMotionRocket(btn) {
+    prepareMotion('rocket', btn);
+  }
+  function toggleMotionAir(btn) {
+    prepareMotion('air', btn);
+  }
+  function toggleMotionSea(btn) {
+    prepareMotion('sea', btn);
+  }
+  function toggleMotionDrone(btn) {
+    prepareMotion('drone', btn);
+  }
+  function prepareMotion(type, btn) {
+    setPanelButtonsInactive();
+    clearAutoPoly(false);
+    resetDraw();
+    clearMotionTrail();
+    mode = 'view';
+    motionMode = true;
+    motionType = type;
+    motionStart = null;
+    motionBtn = btn;
+    btn.classList.add('active');
+  }
+
+  function startAutoPoly(btn) {
+    setPanelButtonsInactive();
+    resetDraw();
+    stopMotionMode(false);
+    mode = 'view';
+    autoPolyMode = true;
+    activeAutoPolyBtn = btn;
+    btn.classList.add('active');
+  }
+
+  function addAutoPolyPoint(lngLat) {
+    autoPolyPoints.push([lngLat.lng, lngLat.lat]);
+    drawAutoPolyDraft();
+  }
+
+  function drawAutoPolyDraft() {
+    const points = autoPolyPoints.map(c => ({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: c },
+      properties: { fillColor: '#FFD900' }
+    }));
+    const lines = autoPolyPoints.length > 1 ? [{
+      type: 'Feature',
+      geometry: { type: 'LineString', coordinates: autoPolyPoints },
+      properties: { color: '#FFD400', weight: 3.5 }
+    }] : [];
+    setDraft(lines, points);
+  }
+
+  function setDraft(lines, points) {
+    const features = [...lines, ...points];
+    const src = map.getSource('draft');
+    if (src) src.setData({ type: 'FeatureCollection', features });
+  }
+
+  function undoAutoPolyPoint() {
+    if (!autoPolyMode || autoPolyPoints.length === 0) return;
+    autoPolyPoints.pop();
+    drawAutoPolyDraft();
+  }
+
+  function clearAutoPoly(resetButton = true) {
+    autoPolyMode = false;
+    autoPolyPoints = [];
+    setDraft([], []);
+    if (resetButton && activeAutoPolyBtn) {
+      activeAutoPolyBtn.classList.remove('active');
+      activeAutoPolyBtn = null;
+    }
+  }
+
+  function finishAutoPoly() {
+    if (autoPolyPoints.length < 2) return;
+    vectorFeatures.push({
+      id: crypto.randomUUID(),
+      kind: 'yellow_line',
+      geometry: { type: 'LineString', coordinates: autoPolyPoints },
+      properties: {
+        category: 'drawing',
+        keepOnEraseAll: true,
+        color: '#ffd400',
+        weight: 3.5,
+        opacity: 1,
+        dash: [1,0],
+        yellowLine: true
+      }
+    });
+    updateVectorSource();
+    clearAutoPoly(true);
+  }
+
+  function isFeatureVisible(f) {
+    const cat = f.properties?.category;
+    if (cat === 'motion') return layerState.motion;
+    if (cat === 'drawing') return layerState.drawing;
+    return layerState.tactical;
+  }
+
+  function updatePlacedMarkersVisibility() {
+    placedMarkers.forEach(m => {
+      m.el.style.display = layerState.tactical ? '' : 'none';
+    });
+  }
+
+  function updateMotionMarkersVisibility() {
+    motionMarkers.forEach(m => {
+      m.el.style.display = layerState.motion ? '' : 'none';
+    });
+  }
+
+  function updateLabelsVisibility() {
+    const style = map.getStyle();
+    if (!style || !style.layers) return;
+    style.layers.forEach(layer => {
+      if ((layer.id || '').startsWith('selected-villages-boost-')) {
+        try {
+          map.setLayoutProperty(layer.id, 'visibility', layerState.labels ? 'visible' : 'none');
+        } catch (e) {}
+      }
+    });
+    updateVillagesVisibility();
+  }
+
+  function updateLayerVisibilityUI() {
+    document.querySelectorAll('[data-layer-toggle]').forEach(btn => {
+      const key = btn.getAttribute('data-layer-toggle');
+      btn.classList.toggle('active', !!layerState[key]);
+    });
+  }
+
+  function refreshLayerVisibility() {
+    updateVectorSource();
+    updatePlacedMarkersVisibility();
+    updateMotionMarkersVisibility();
+    updateLabelsVisibility();
+    updateVillagesVisibility();
+    updateLayerVisibilityUI();
+  }
+
+  function updateVectorSource() {
+    const features = vectorFeatures.filter(isFeatureVisible).map(f => ({
+      type: 'Feature',
+      id: f.id,
+      geometry: f.geometry,
+      properties: { ...f.properties, id: f.id, kind: f.kind }
+    }));
+    const src = map.getSource('drawn');
+    if (src) src.setData({ type: 'FeatureCollection', features });
+  }
+
+  function createMarker(lat, lng, data, rotation = 0) {
+    const el = document.createElement('div');
+    el.className = 'custom-marker';
+    const img = document.createElement('img');
+    img.src = data.src;
+    img.style.width = data.w + 'px';
+    img.style.height = data.h + 'px';
+    img.style.transform = `rotate(${rotation}deg)`;
+    el.appendChild(img);
+
+    let markerObj = null;
+    let currentRotation = rotation;
+
+    const marker = new maplibregl.Marker({ element: el, draggable: true, anchor: 'center' })
+      .setLngLat([lng, lat])
+      .addTo(map);
+
+    marker.on('dragstart', () => { activeMarker = markerObj; });
+
+    markerObj = {
+      id: crypto.randomUUID(),
+      marker,
+      data: { ...data },
+      el,
+      img,
+      get rotation() { return currentRotation; },
+      set rotation(v) { currentRotation = v; img.style.transform = `rotate(${v}deg)`; }
+    };
+
+    markerObj.el.addEventListener('mousedown', () => { activeMarker = markerObj; });
+    markerObj.el.addEventListener('touchstart', () => { activeMarker = markerObj; }, { passive: true });
+
+    placedMarkers.push(markerObj);
+    updateMarkerSize(markerObj);
+    updatePlacedMarkersVisibility();
+    return markerObj;
+  }
+
+  function updateMarkerSize(markerObj) {
+    const z = map.getZoom();
+    const baseZoom = 12;
+    const scale = z <= baseZoom ? Math.pow(2, z - baseZoom) : 1;
+    markerObj.img.style.width = `${markerObj.data.w * scale}px`;
+    markerObj.img.style.height = `${markerObj.data.h * scale}px`;
+    markerObj.img.style.transform = `rotate(${markerObj.rotation || 0}deg)`;
+  }
+
+  function updateMarkerSizes() {
+    placedMarkers.forEach(updateMarkerSize);
+    motionMarkers.forEach(m => {
+      if (m.updateSize) m.updateSize();
+    });
+  }
+
+  function flipActive(val) {
+    if (!activeMarker) return;
+    activeMarker.img.style.transform = `scaleX(${val}) rotate(${activeMarker.rotation || 0}deg)`;
+  }
+
+  function removeMarkerObj(markerObj) {
+    const idx = placedMarkers.indexOf(markerObj);
+    if (idx >= 0) placedMarkers.splice(idx, 1);
+    markerObj.marker.remove();
+  }
+
+  function circlePolygon(center, radiusMeters, steps = 64) {
+    const [lng, lat] = center;
+    const coords = [];
+    const earth = 6378137;
+    const d = radiusMeters / earth;
+    const latRad = lat * Math.PI / 180;
+    const lngRad = lng * Math.PI / 180;
+    for (let i = 0; i <= steps; i++) {
+      const brng = 2 * Math.PI * i / steps;
+      const lat2 = Math.asin(Math.sin(latRad) * Math.cos(d) + Math.cos(latRad) * Math.sin(d) * Math.cos(brng));
+      const lng2 = lngRad + Math.atan2(Math.sin(brng) * Math.sin(d) * Math.cos(latRad), Math.cos(d) - Math.sin(latRad) * Math.sin(lat2));
+      coords.push([lng2 * 180 / Math.PI, lat2 * 180 / Math.PI]);
+    }
+    return coords;
+  }
+
+  function featureAtPoint(point) {
+    const feats = map.queryRenderedFeatures(point, { layers: ['poly-fill','poly-stroke','line-layer'] });
+    return feats[0] || null;
+  }
+
+
+  function pointInPolygonScreen(point, ring) {
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const xi = ring[i].x, yi = ring[i].y;
+      const xj = ring[j].x, yj = ring[j].y;
+      const intersect = ((yi > point.y) !== (yj > point.y)) &&
+        (point.x < (xj - xi) * (point.y - yi) / ((yj - yi) || 1e-9) + xi);
+      if (intersect) inside = !inside;
+    }
+    return inside;
+  }
+
+  function distPointToSegment(point, a, b) {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    if (dx === 0 && dy === 0) return Math.hypot(point.x - a.x, point.y - a.y);
+    const t = Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / (dx * dx + dy * dy)));
+    const px = a.x + t * dx;
+    const py = a.y + t * dy;
+    return Math.hypot(point.x - px, point.y - py);
+  }
+
+  function featureContainsPoint(feature, point) {
+    if (!feature || !feature.geometry) return false;
+    const g = feature.geometry;
+    if (g.type === 'Polygon') {
+      const ring = g.coordinates[0].map(c => map.project(c));
+      return pointInPolygonScreen(point, ring);
+    }
+    if (g.type === 'LineString') {
+      const pts = g.coordinates.map(c => map.project(c));
+      const tolerance = Math.max(12, (feature.properties?.weight || 2) + 8);
+      for (let i = 0; i < pts.length - 1; i++) {
+        if (distPointToSegment(point, pts[i], pts[i + 1]) <= tolerance) return true;
+      }
+    }
+    return false;
+  }
+
+  function findFeatureIndexAtPoint(point, predicate) {
+    for (let i = vectorFeatures.length - 1; i >= 0; i--) {
+      const f = vectorFeatures[i];
+      if (predicate && !predicate(f)) continue;
+      if (featureContainsPoint(f, point)) return i;
+    }
+    return -1;
+  }
+
+
+  function onMapClick(e) {
+    if (Date.now() < villageClickHandledUntil) return;
+    const point = e.point;
+    const lngLat = e.lngLat;
+
+    if (mode === 'erase_yellow') {
+      const idx = findFeatureIndexAtPoint(point, f => f.kind === 'yellow_line' || f.properties?.yellowLine === true);
+      if (idx >= 0) {
+        vectorFeatures.splice(idx, 1);
+        updateVectorSource();
+      }
+      return;
+    }
+
+    if (mode === 'erase_all') {
+      // Red eraser: remove only the clicked non-drawing item
+      const mapRect = map.getCanvas().getBoundingClientRect();
+      const clientX = mapRect.left + point.x;
+      const clientY = mapRect.top + point.y;
+
+      for (let i = placedMarkers.length - 1; i >= 0; i--) {
+        const rect = placedMarkers[i].el.getBoundingClientRect();
+        if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) {
+          removeMarkerObj(placedMarkers[i]);
+          return;
+        }
+      }
+
+      const idx = findFeatureIndexAtPoint(point, f => !f.properties?.keepOnEraseAll);
+      if (idx >= 0) {
+        const groupId = vectorFeatures[idx].properties?.eraseGroupId;
+        if (groupId) {
+          for (let j = vectorFeatures.length - 1; j >= 0; j--) {
+            if (vectorFeatures[j].properties?.eraseGroupId === groupId) {
+              vectorFeatures.splice(j, 1);
+            }
+          }
+        } else {
+          vectorFeatures.splice(idx, 1);
+        }
+        updateVectorSource();
+        return;
+      }
+
+      return;
+    }
+
+    if (mode === 'erase_poly') {
+      const idx = findFeatureIndexAtPoint(point, f => f.properties?.category === 'drawing');
+      if (idx >= 0) {
+        vectorFeatures.splice(idx, 1);
+        updateVectorSource();
+      }
+      return;
+    }
+
+    if (autoPolyMode) {
+      addAutoPolyPoint(lngLat);
+      return;
+    }
+
+    if (motionMode) {
+      if (!motionStart) {
+        motionStart = lngLat;
+        return;
+      }
+      animateMotion(motionStart, lngLat);
+      motionStart = null;
+      return;
+    }
+
+    if (mode === 'place' && unitToPlace) {
+      createMarker(lngLat.lat, lngLat.lng, unitToPlace);
+      unitToPlace = null;
+      mode = 'view';
+      setPanelButtonsInactive();
+      return;
+    }
+
+    if (mode.startsWith('circle')) {
+      const clr = mode.includes('red') ? '#f44' : mode.includes('blue') ? '#1a1aff' : '#ff0';
+      vectorFeatures.push({
+        id: crypto.randomUUID(),
+        kind: 'circle',
+        geometry: { type: 'Polygon', coordinates: [circlePolygon([lngLat.lng, lngLat.lat], 800)] },
+        properties: {
+          category: 'drawing',
+          fillColor: clr,
+          fillOpacity: 0.6,
+          strokeColor: clr,
+          strokeWidth: 0
+        }
+      });
+      updateVectorSource();
+      return;
+    }
+
+    if (mode.startsWith('arrow')) {
+      if (!arrowStart) {
+        arrowStart = [lngLat.lng, lngLat.lat];
+        setDraft([], [{
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: arrowStart },
+          properties: { fillColor: '#ffffff' }
+        }]);
+      } else {
+        drawArrow(arrowStart, [lngLat.lng, lngLat.lat], mode.includes('red') ? '#ff3333' : '#3388ff');
+        resetDraw();
+      }
+      return;
+    }
+
+    if (mode.startsWith('poly')) {
+      polyPoints.push([lngLat.lng, lngLat.lat]);
+
+      const points = polyPoints.map(c => ({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: c },
+        properties: { fillColor: '#ffffff' }
+      }));
+
+      const lines = polyPoints.length > 1 ? [{
+        type: 'Feature',
+        geometry: { type: 'LineString', coordinates: polyPoints },
+        properties: { color: '#ffffff', weight: 2 }
+      }] : [];
+
+      setDraft(lines, points);
+      return;
+    }
+  }
+
+  function onMapDoubleClick(e) {
+    if (!mode.startsWith('poly') || polyPoints.length < 3) return;
+
+    const styles = {
+      'poly-darkred': { fill: '#cc0000', stroke: '#ff4d4d', hasStroke: true },
+      'poly-lightred': { fill: '#ff8080', stroke: 'none', hasStroke: false },
+      'poly-blue': { fill: '#4da3ff', stroke: 'none', hasStroke: false }
+    };
+    const s = styles[mode];
+    if (!s) return;
+
+    vectorFeatures.push({
+      id: crypto.randomUUID(),
+      kind: 'polygon',
+      geometry: { type: 'Polygon', coordinates: [polyPoints] },
+      properties: {
+        category: 'drawing',
+        keepOnEraseAll: true,
+        fillColor: s.fill,
+        fillOpacity: 0.45,
+        strokeColor: s.stroke,
+        strokeWidth: s.hasStroke ? 2.5 : 0
+      }
+    });
+    updateVectorSource();
+    resetDraw();
+  }
+
+  function drawArrow(start, end, color) {
+    const groupId = crypto.randomUUID();
+
+    vectorFeatures.push({
+      id: crypto.randomUUID(),
+      kind: 'line',
+      geometry: { type: 'LineString', coordinates: [start, end] },
+      properties: {
+        category: 'arrow',
+        eraseGroupId: groupId,
+        color,
+        weight: 5,
+        opacity: 0.9,
+        dash: [1,0]
+      }
+    });
+
+    const p1 = map.project(start);
+    const p2 = map.project(end);
+    const ang = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+    const hL = 18, hA = Math.PI / 6;
+    const l1 = map.unproject([p2.x - hL * Math.cos(ang - hA), p2.y - hL * Math.sin(ang - hA)]);
+    const l2 = map.unproject([p2.x - hL * Math.cos(ang + hA), p2.y - hL * Math.sin(ang + hA)]);
+    vectorFeatures.push({
+      id: crypto.randomUUID(),
+      kind: 'polygon',
+      geometry: { type: 'Polygon', coordinates: [[[end[0], end[1]], [l1.lng, l1.lat], [l2.lng, l2.lat], [end[0], end[1]]]] },
+      properties: {
+        category: 'arrow',
+        eraseGroupId: groupId,
+        fillColor: color,
+        fillOpacity: 1,
+        strokeColor: color,
+        strokeWidth: 1
+      }
+    });
+    updateVectorSource();
+  }
+
+  function clearMotionTrail() {
+    motionIntervals.forEach(clearInterval);
+    motionTimeouts.forEach(clearTimeout);
+    motionIntervals = [];
+    motionTimeouts = [];
+    motionMarkers.forEach(m => m.marker.remove());
+    motionMarkers.length = 0;
+    for (let i = vectorFeatures.length - 1; i >= 0; i--) {
+      if (vectorFeatures[i].properties?.category === 'motion') {
+        vectorFeatures.splice(i, 1);
+      }
+    }
+    updateVectorSource();
+    updateMotionMarkersVisibility();
+    stopMotionMode(true);
+  }
+
+  function buildCurvePoints(start, end, arcHeight = 0.03, steps = 90) {
+    const midLat = (start.lat + end.lat) / 2 + arcHeight;
+    const midLng = (start.lng + end.lng) / 2;
+    const pts = [];
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const lat = (1 - t) * (1 - t) * start.lat + 2 * (1 - t) * t * midLat + t * t * end.lat;
+      const lng = (1 - t) * (1 - t) * start.lng + 2 * (1 - t) * t * midLng + t * t * end.lng;
+      pts.push({ lat, lng });
+    }
+    return pts;
+  }
+
+  function getAngleDegOnScreen(a, b) {
+    const p1 = map.project([a.lng, a.lat]);
+    const p2 = map.project([b.lng, b.lat]);
+    return Math.atan2(p2.y - p1.y, p2.x - p1.x) * 180 / Math.PI;
+  }
+
+  function createMotionMarker(src, width, height) {
+    const el = document.createElement('div');
+    el.className = 'custom-marker';
+    const img = document.createElement('img');
+    img.src = src;
+    img.style.width = width + 'px';
+    img.style.height = height + 'px';
+    el.appendChild(img);
+    const marker = new maplibregl.Marker({ element: el, anchor: 'center' }).setLngLat([0,0]).addTo(map);
+    const obj = {
+      marker, el, img, width, height, rotation: 0,
+      updateSize() {
+        const z = map.getZoom();
+        const baseZoom = 12;
+        const scale = z <= baseZoom ? Math.pow(2, z - baseZoom) : 1;
+        img.style.width = `${width * scale}px`;
+        img.style.height = `${height * scale}px`;
+        img.style.transform = `rotate(${this.rotation}deg)`;
+      }
+    };
+    obj.updateSize();
+    motionMarkers.push(obj);
+    updateMotionMarkersVisibility();
+    return obj;
+  }
+
+  function spawnArrivalExplosion(lngLat, src, size = 90) {
+    let count = 0;
+    const interval = setInterval(() => {
+      const boom = createMotionMarker(src, size, size);
+      boom.marker.setLngLat([lngLat.lng, lngLat.lat]);
+      setTimeout(() => boom.marker.remove(), 180);
+      count++;
+      if (count >= 4) clearInterval(interval);
+    }, 160);
+    motionIntervals.push(interval);
+  }
+
+  function animateGenericMotion(start, end, config) {
+    const pts = buildCurvePoints(start, end, config.arcHeight, config.steps);
+    const lineId = crypto.randomUUID();
+    vectorFeatures.push({
+      id: lineId,
+      kind: 'line',
+      geometry: { type: 'LineString', coordinates: pts.map(p => [p.lng, p.lat]) },
+      properties: { category: 'motion', color: config.trailColor, weight: config.trailWeight, opacity: config.trailOpacity, dash: [2,2] }
+    });
+    updateVectorSource();
+
+    const mover = createMotionMarker(config.src, config.width, config.height || config.width);
+    let i = 0;
+    const ms = config.duration / pts.length;
+    const timer = setInterval(() => {
+      if (i >= pts.length) {
+        clearInterval(timer);
+        mover.marker.remove();
+        spawnArrivalExplosion(end, config.arrivalSrc, config.arrivalSize);
+        return;
+      }
+      const p = pts[i];
+      mover.marker.setLngLat([p.lng, p.lat]);
+      if (config.rotateOnPath && i < pts.length - 1) {
+        mover.rotation = getAngleDegOnScreen(pts[i], pts[i+1]) + (config.angleOffset || 0);
+        mover.img.style.transform = `rotate(${mover.rotation}deg)`;
+      }
+      i++;
+    }, ms);
+    motionIntervals.push(timer);
+  }
+
+  function animateEmitterMotion(start, end, config) {
+    const pts = buildCurvePoints(start, end, config.arcHeight, config.steps);
+    const emitter = createMotionMarker(config.src, config.width, config.height || config.width);
+    emitter.marker.setLngLat([start.lng, start.lat]);
+
+    let drawn = [[start.lng, start.lat]];
+    const lineFeature = {
+      id: crypto.randomUUID(),
+      kind: 'line',
+      geometry: { type: 'LineString', coordinates: drawn },
+      properties: { category: 'motion', color: config.trailColor, weight: config.trailWeight, opacity: config.trailOpacity, dash: [2,2] }
+    };
+    vectorFeatures.push(lineFeature);
+    updateVectorSource();
+
+    let i = 1;
+    const ms = config.duration / pts.length;
+    const timer = setInterval(() => {
+      if (i >= pts.length) {
+        clearInterval(timer);
+        spawnArrivalExplosion(end, config.arrivalSrc, config.arrivalSize);
+        return;
+      }
+      const p = pts[i];
+      drawn.push([p.lng, p.lat]);
+      lineFeature.geometry.coordinates = drawn;
+      updateVectorSource();
+      i++;
+    }, ms);
+    motionIntervals.push(timer);
+  }
+
+  function animateMotion(start, end, isReplay = false) {
+    if (!isReplay) {
+      motionHistory.push({
+        type: motionType,
+        start: { lng: start.lng, lat: start.lat },
+        end: { lng: end.lng, lat: end.lat },
+        duration: motionType === 'sea' ? 2600 : (motionType === 'air' ? 2200 : (motionType === 'drone' ? 2300 : 1800))
+      });
+    }
+    if (motionType === 'rocket') {
+      animateGenericMotion(start, end, {
+        src: 'OIP-removebg-preview.png',
+        width: 40, height: 40, arcHeight: 0.03, steps: 90, duration: 1800,
+        trailColor: '#7ec3ff', trailWeight: 3, trailOpacity: 0.55,
+        arrivalSrc: 'pngwing.com (1).png', arrivalSize: 90,
+        rotateOnPath: true, angleOffset: 0
+      });
+    } else if (motionType === 'air') {
+      animateEmitterMotion(start, end, {
+        src: 'allii2.gif',
+        width: 56, height: 38, arcHeight: 0.05, steps: 90, duration: 2200,
+        trailColor: '#9fd3ff', trailWeight: 3, trailOpacity: 0.60,
+        arrivalSrc: 'pngwing.com.png', arrivalSize: 95
+      });
+    } else if (motionType === 'sea') {
+      animateEmitterMotion(start, end, {
+        src: 'render2-removebg-preview.png',
+        width: 62, height: 34, arcHeight: 0.008, steps: 90, duration: 2600,
+        trailColor: '#8be0ff', trailWeight: 3, trailOpacity: 0.60,
+        arrivalSrc: 'pngwing.com (1).png', arrivalSize: 90
+      });
+    } else if (motionType === 'drone') {
+      animateGenericMotion(start, end, {
+        src: 'shahed-136-.png',
+        width: 48, height: 34, arcHeight: 0.025, steps: 90, duration: 2300,
+        trailColor: '#b7dcff', trailWeight: 2.5, trailOpacity: 0.50,
+        arrivalSrc: 'pngwing.com.png', arrivalSize: 92,
+        rotateOnPath: true, angleOffset: DRONE_ANGLE_OFFSET
+      });
+    }
+  }
+
+
+  function takeMapScreenshot() {
+    // First try real MapLibre canvas capture. preserveDrawingBuffer is enabled above.
+    try {
+      map.once('idle', () => {
+        try {
+          const canvas = map.getCanvas();
+          const a = document.createElement('a');
+          a.download = 'ALModon_Map_Screenshot.png';
+          a.href = canvas.toDataURL('image/png');
+          a.click();
+        } catch (e) {
+          fallbackHtmlScreenshot();
+        }
+      });
+      map.triggerRepaint();
+    } catch (e) {
+      fallbackHtmlScreenshot();
+    }
+  }
+
+  function fallbackHtmlScreenshot() {
+    const oldHidden = !panelsVisible;
+    togglePanels(false);
+    setTimeout(() => {
+      if (window.html2canvas) {
+        html2canvas(document.getElementById('appRoot'), {
+          useCORS: true,
+          allowTaint: true,
+          backgroundColor: null,
+          logging: false
+        }).then(canvas => {
+          const a = document.createElement('a');
+          a.download = 'ALModon_Map_Screenshot.png';
+          a.href = canvas.toDataURL('image/png');
+          a.click();
+          if (!oldHidden) togglePanels(true);
+        }).catch(() => {
+          if (!oldHidden) togglePanels(true);
+          alert('تعذر أخذ لقطة الشاشة من المتصفح. جرّب Chrome/Edge عبر Live Server.');
+        });
+      } else {
+        if (!oldHidden) togglePanels(true);
+        alert('مكتبة screenshot لم تُحمّل بعد. تأكد من وجود اتصال إنترنت.');
+      }
+    }, 350);
+  }
+
+  function exportData() {
+    const items = {
+      mapView: { center: map.getCenter(), zoom: map.getZoom() },
+      layerState: { ...layerState },
+      motionHistory: motionHistory,
+      markers: placedMarkers.map(m => ({
+        lngLat: m.marker.getLngLat(),
+        data: m.data,
+        rotation: m.rotation || 0
+      })),
+      features: vectorFeatures,
+      villageStatuses: villageStatuses
+    };
+    const blob = new Blob([JSON.stringify(items)], { type: 'application/json' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'ALModon_Vector_Map.json';
+    link.click();
+  }
+
+  function importData(ev) {
+    const file = ev.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const data = JSON.parse(e.target.result);
+        applySceneData(data);
+      } catch (err) {
+        alert('Import failed');
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  function clearAllData() {
+    if (!confirm('سيتم مسح كل شيء، هل أنت متأكد؟')) return;
+    placedMarkers.slice().forEach(removeMarkerObj);
+    vectorFeatures.length = 0;
+    Object.keys(villageStatuses).forEach(k => delete villageStatuses[k]);
+    if (villagesGeoData) villagesGeoData.features.forEach(f => { f.properties.almodon_status = 'none'; });
+    applyVillageStatuses();
+    updateVectorSource();
+    clearMotionTrail();
+    clearAutoPoly(true);
+    resetDraw();
+  }
+</script>
+</body>
+</html>
